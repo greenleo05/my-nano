@@ -8,6 +8,13 @@
 
 #define CTRL_KEY(k) ((k) & 0x1f) //Ctrl 키 조합을 위해 같이 입력받은 문자의 맨 뒤 5비트를 제외하고 모두 날려버림
 
+enum editorKey{
+    ARROW_LEFT = 1000,
+    ARROW_RIGHT,
+    ARROW_UP,
+    ARROW_DOWN
+};
+
 struct editorConfig{
     int cx, cy;
     struct termios orig_termios;
@@ -52,12 +59,12 @@ void enableRawMode()
     }
 }
 
-#define SCREED_ROWS 24
+#define SCREEN_ROWS 24
 
 void editorDrawRows()
 {
     int y;
-    for (int y = 0; y < SCREED_ROWS; y++)
+    for (int y = 0; y < SCREEN_ROWS; y++)
     {
         write(STDOUT_FILENO, "~\r\n", 3);
     }
@@ -81,43 +88,75 @@ void editorRefreshScreen()
     write(STDOUT_FILENO, buf, strlen(buf));
 }
 
-void editorMoveCursor(char key)
+void editorMoveCursor(int key)
 {
     switch (key)
     {
-        case 'a':
+        case ARROW_LEFT:
             if(E.cx > 0) E.cx--;
             break;
-        case 'd':
+        case ARROW_RIGHT:
             E.cx++;
             break;
-        case 'w':
+        case ARROW_UP:
             if(E.cy > 0) E.cy--;
             break;
-        case 's':
-            if (E.cy < SCREED_ROWS - 1) E.cy++;
+        case ARROW_DOWN:
+            if (E.cy < SCREEN_ROWS - 1) E.cy++;
             break;
     }
+}
+
+int editorReadKey()
+{
+    char c;
+    int nread = read(STDIN_FILENO, &c, 1);
+
+    while(nread != 1)
+    {
+        if (nread == -1 && errno != EAGAIN)
+            die("read");
+
+        nread = read(STDIN_FILENO, &c, 1);
+    }
+
+    if (c == '\x1b')
+    {
+        char seq[3];
+
+        // 버퍼에 다음 글자가 있는지 확인 (없으면 ESC로 간주)
+        if (read(STDIN_FILENO, &seq[0], 1) != 1) return '\x1b';
+        if (read(STDIN_FILENO, &seq[1], 1) != 1) return '\x1b';
+
+        // 패턴 확인: \x1b[...
+        if (seq[0] == '[')
+        {
+            switch (seq[1])
+            {
+                case 'A': return ARROW_UP;    //\x1b[A
+                case 'B': return ARROW_DOWN;  //\x1b[B
+                case 'C': return ARROW_RIGHT; //\x1b[C
+                case 'D': return ARROW_LEFT;  //\x1b[D
+            }
+        }
+
+        return '\x1b'; // 패턴이 안 맞으면 그냥 ESC 키로 간주
+    }
+    
+    return c;
 }
 
 int main()
 {
     setbuf(stdout, NULL);
     enableRawMode();
-
+    initEditor();
     editorRefreshScreen();
 
     while(1)
     {
-        char c = '\0'; //문자를 저장할 변수
-
-        int nread = read(STDIN_FILENO, &c, 1);
-
-        //오류처리
-        if (nread == -1 && errno != EAGAIN)
-            die("read");
-
-        if (nread == 0) continue;
+        editorRefreshScreen();
+        int c = editorReadKey();
     
         if (c == CTRL_KEY('q'))
         {
@@ -126,14 +165,9 @@ int main()
             break;
         }
 
-        //모든 오류와 종료키를 뚫고 온 결과!
-        if (c == 'w' || c == 'a' || c == 's' || c == 'd')
-        {
-            editorMoveCursor(c);
-            editorRefreshScreen();
-        }
+        //모든 오류와 종료키 입력을 뚫고 온 결과!
+        editorMoveCursor(c);
     }
     
-
     return 0;
 }
