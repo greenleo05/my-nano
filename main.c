@@ -1,94 +1,96 @@
-#include <unistd.h>
-#include <termios.h> //Linux terminal 관련 헤더
-#include <stdlib.h>
-#include <stdio.h>
-#include <ctype.h>
-#include <errno.h>
-#include <string.h>
+#include "nanodata.h"
+#include "nanofile.h"
+#include "nanooutput.h"
+#include "nanorow.h"
+#include "nanoterminal.h"
 
-#define CTRL_KEY(k) ((k) & 0x1f) //Ctrl 키 조합을 위해 같이 입력받은 문자의 맨 뒤 5비트를 제외하고 모두 날려버림
+/*전역 변수*/
+struct editorConfig E; //에디터 설정 전역 변수
 
-enum editorKey{
-    ARROW_LEFT = 1000,
-    ARROW_RIGHT,
-    ARROW_UP,
-    ARROW_DOWN
-};
+void initEditor(); //에디터 초기화 함수 선언
+void editorProcessKeypress(); //키 입력 처리 함수 선언
+void editorMoveCursor(int key); //커서 이동 함수 선언
 
-struct editorConfig{
-    int cx, cy;
-    struct termios orig_termios;
-};
-
-void die(const char* s)
+int main(int argc, char* argv[])
 {
-    perror(s);
-    exit(1);
-}
+    //초기 세팅
+    setbuf(stdout, NULL);
+    enableRawMode();
+    initEditor();
 
-struct editorConfig E;
-
-void disableRawMode()
-{
-    tcsetattr(STDIN_FILENO, TCSAFLUSH, &E.orig_termios);
-}
-
-void enableRawMode()
-{
-    if (tcgetattr(STDIN_FILENO, &E.orig_termios) == -1)
+    //파일 이름 받기
+    if (argc >= 2)
     {
-        die("tcgetattr");
+        editorOpen(argv[1]);
     }
+    
+    editorRefreshScreen(); //화면 초기 새로고침
 
-    atexit(disableRawMode);
-
-    struct termios raw = E.orig_termios;
-
-    //잡다한 기능 다 꺼버리기
-    raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
-    raw.c_oflag &= ~(OPOST);
-    raw.c_cflag |= (CS8);
-    raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
-    raw.c_cc[VMIN] = 0;
-    raw.c_cc[VTIME] = 1;
-
-
-    if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1)
+    while(1)
     {
-        die("tcsetattr");
+        editorRefreshScreen(); //화면 업데이트
+        editorProcessKeypress(); //키 입력 처리
     }
+    
+    return 0;
 }
 
-#define SCREEN_ROWS 24
-
-void editorDrawRows()
+void initEditor() //에디터 초기화
 {
-    int y;
-    for (int y = 0; y < SCREEN_ROWS; y++)
-    {
-        write(STDOUT_FILENO, "~\r\n", 3);
-    }
-}
-
-void initEditor()
-{
+    //변수 초기화
     E.cx = 0;
     E.cy = 0;
+    E.rowoff = 0;
+    E.coloff = 0;
+    E.numrows = 0;
+    E.row = NULL;
+
+    //윈도우 값 받아오기 + 오류 처리
+    if (getWindowSize(&E.screenrows, &E.screencols) == -1)
+    {
+        die("getWindowSize");
+    }
 }
 
-void editorRefreshScreen()
+void editorProcessKeypress() //키 입력 처리
 {
-    write(STDOUT_FILENO, "\x1b[2J", 4); //화면 지우기
-    write(STDOUT_FILENO, "\x1b[H", 3);  //커서를 맨 위로 이동
+    int c = editorReadKey(); //키 입력 읽기
 
-    editorDrawRows();
+    switch (c)
+    {
+        case CTRL_KEY('q'): //Ctrl-Q 입력 시 종료
+            write(STDOUT_FILENO, "\x1b[2J", 4);
+            write(STDOUT_FILENO, "\x1b[H", 3);
+            exit(0);
+            break;
 
-    char buf[32];
-    snprintf(buf, sizeof(buf), "\x1b[%d;%dH", E.cy + 1, E.cx + 1);
-    write(STDOUT_FILENO, buf, strlen(buf));
+        case ARROW_UP:
+        case ARROW_DOWN:
+        case ARROW_LEFT:
+        case ARROW_RIGHT:
+            editorMoveCursor(c); //커서 이동
+            break;
+
+        case 127: //백스페이스 키
+        case CTRL_KEY('h'): //Ctrl-H 키 (백스페이스와 동일)
+        case CTRL_KEY('?'): //Ctrl-? 키 (백스페이스와 동일)
+            editorDelChar(); //문자 삭제
+            break;
+        
+        default:
+            if (c == '\x1b' || c == '\r') //백스페이스, ESC, 엔터키 무시
+            {
+                //일단 비우기
+            }
+            else
+            {
+                editorInsertChar(c); //문자 삽입
+            }
+            break;
+    }
 }
 
-void editorMoveCursor(int key)
+void editorMoveCursor(int key) //커서 이동
 {
     switch (key)
     {
@@ -96,78 +98,30 @@ void editorMoveCursor(int key)
             if(E.cx > 0) E.cx--;
             break;
         case ARROW_RIGHT:
-            E.cx++;
+            if (E.cy < E.numrows)
+            { 
+                erow *row = &E.row[E.cy]; //E.cy번째 줄(커서가 현재 있는 줄)의 정보를 row 포인터에 저장
+                if (E.cx < row->size) E.cx++; //그 줄의 길이가 커서의 x 위치보다 커야 커서를 오른쪽으로 이동할 수 있음
+            }
             break;
         case ARROW_UP:
             if(E.cy > 0) E.cy--;
             break;
         case ARROW_DOWN:
-            if (E.cy < SCREEN_ROWS - 1) E.cy++;
+            if (E.cy < E.numrows) E.cy++;
             break;
     }
-}
 
-int editorReadKey()
-{
-    char c;
-    int nread = read(STDIN_FILENO, &c, 1);
+    //커서가 현재 줄의 길이를 넘어가지 않도록 조정
 
-    while(nread != 1)
+    int rowlen = 0;
+    if (E.cy < E.numrows) //현재 줄이 빈 줄이 아니면
     {
-        if (nread == -1 && errno != EAGAIN)
-            die("read");
-
-        nread = read(STDIN_FILENO, &c, 1);
+        rowlen = E.row[E.cy].size; //현재 줄의 길이 저장
     }
 
-    if (c == '\x1b')
+    if (E.cx > rowlen) //현재 커서가 줄 바깥에 있다면
     {
-        char seq[3];
-
-        // 버퍼에 다음 글자가 있는지 확인 (없으면 ESC로 간주)
-        if (read(STDIN_FILENO, &seq[0], 1) != 1) return '\x1b';
-        if (read(STDIN_FILENO, &seq[1], 1) != 1) return '\x1b';
-
-        // 패턴 확인: \x1b[...
-        if (seq[0] == '[')
-        {
-            switch (seq[1])
-            {
-                case 'A': return ARROW_UP;    //\x1b[A
-                case 'B': return ARROW_DOWN;  //\x1b[B
-                case 'C': return ARROW_RIGHT; //\x1b[C
-                case 'D': return ARROW_LEFT;  //\x1b[D
-            }
-        }
-
-        return '\x1b'; // 패턴이 안 맞으면 그냥 ESC 키로 간주
+        E.cx = rowlen; //커서를 당겨서 붙이기
     }
-    
-    return c;
-}
-
-int main()
-{
-    setbuf(stdout, NULL);
-    enableRawMode();
-    initEditor();
-    editorRefreshScreen();
-
-    while(1)
-    {
-        editorRefreshScreen();
-        int c = editorReadKey();
-    
-        if (c == CTRL_KEY('q'))
-        {
-            write(STDOUT_FILENO, "\x1b[2J", 4);
-            write(STDOUT_FILENO, "\x1b[H", 3);
-            break;
-        }
-
-        //모든 오류와 종료키 입력을 뚫고 온 결과!
-        editorMoveCursor(c);
-    }
-    
-    return 0;
 }
