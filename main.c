@@ -26,6 +26,8 @@ int main(int argc, char* argv[])
     
     editorRefreshScreen(); //화면 초기 새로고침
 
+    editorSetStatusMessage("환영합니다! Ctrl-S = 저장 | Ctrl-Q = 종료");
+
     while(1)
     {
         editorRefreshScreen(); //화면 업데이트
@@ -44,12 +46,15 @@ void initEditor() //에디터 초기화
     E.coloff = 0;
     E.numrows = 0;
     E.row = NULL;
+    E.filename = NULL;
 
     //윈도우 값 받아오기 + 오류 처리
     if (getWindowSize(&E.screenrows, &E.screencols) == -1)
     {
         die("getWindowSize");
     }
+
+    E.screenrows -= 2; //상태 바와 메시지 바를 위해 2줄 빼기
 }
 
 void editorProcessKeypress() //키 입력 처리
@@ -64,6 +69,14 @@ void editorProcessKeypress() //키 입력 처리
             exit(0);
             break;
 
+        case CTRL_KEY('s'): //Ctrl-S 입력 시 파일 저장
+            editorSave();
+            break;
+
+        case CTRL_KEY('f'): //Ctrl-F 입력 시 찾기 기능
+            editorFind();
+            break;
+
         case ARROW_UP:
         case ARROW_DOWN:
         case ARROW_LEFT:
@@ -76,9 +89,13 @@ void editorProcessKeypress() //키 입력 처리
         case CTRL_KEY('?'): //Ctrl-? 키 (백스페이스와 동일)
             editorDelChar(); //문자 삭제
             break;
+
+        case '\r': //엔터 키
+            editorInsertNewLine(); //새 줄 삽입
+            break;
         
         default:
-            if (c == '\x1b' || c == '\r') //백스페이스, ESC, 엔터키 무시
+            if (c == '\x1b') //ESC 키
             {
                 //일단 비우기
             }

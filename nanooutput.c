@@ -1,6 +1,8 @@
 #include "nanooutput.h"
 #include "nanodata.h"
 #include "nanorow.h"
+#include "nanoterminal.h"
+#include <stdarg.h>
 
 void editorScroll() //스크롤 조정
 {
@@ -57,7 +59,7 @@ void editorDrawRows() //줄 그리기
         }
 
         write(STDOUT_FILENO, "\x1b[K", 3); //줄 끝까지 지우기
-        if (y < E.screenrows - 1)
+        if (y < E.screenrows)
         {
             write(STDOUT_FILENO, "\r\n", 2); //줄 바꿈
         }
@@ -72,6 +74,9 @@ void editorRefreshScreen() //화면 업데이트
 
     editorDrawRows(); //줄 그리기
 
+    editorDrawStatusBar(); //상태 바 그리기
+    editorDrawMessageBar(); //메시지 바 그리기
+
     char buf[32];
 
     //커서 위치 이동 계산
@@ -80,4 +85,111 @@ void editorRefreshScreen() //화면 업데이트
     write(STDOUT_FILENO, buf, strlen(buf));
     //커서 띄우기
     write(STDOUT_FILENO, "\x1b[?25h", 6);
+}
+
+void editorSetStatusMessage(const char* fmt, ...) //상태 메시지 설정
+{
+    va_list ap; //가변 인자 리스트
+    va_start(ap, fmt); //가변 인자 처리 시작
+
+    vsnprintf(E.statusmsg, sizeof(E.statusmsg), fmt, ap); //상태 메시지 포맷팅
+
+    va_end(ap); //가변 인자 처리 종료
+    E.statusmsg_time = time(NULL); //현재 시간 저장
+}
+
+void editorDrawStatusBar() //상태 바 그리기
+{
+    write(STDOUT_FILENO, "\x1b[7m", 4); //색상 반전
+
+    char status[80], rstatus[80];
+
+    int len = snprintf(status, sizeof(status), "%.20s - %d lines %s",
+                        E.filename ? E.filename : "[No Name]", E.numrows,
+                        E.dirty ? "(modified)" : ""); //상태 문자열 생성
+    int rlen = snprintf(rstatus, sizeof(rstatus), "%d/%d",
+                        E.cy + 1, E.numrows); //오른쪽 상태 문자열 생성
+
+    if (len > E.screencols)
+        len = E.screencols; //상태 문자열이 화면 너비보다 크면 잘라내기
+    write(STDOUT_FILENO, status, len); //상태 문자열 출력
+
+    while (len < E.screencols) //남은 공간 채우기
+    {
+        if (E.screencols - len == rlen) //오른쪽 상태 문자열이 들어갈 자리면
+        {
+            write(STDOUT_FILENO, rstatus, rlen); //오른쪽 상태 문자열 출력
+            break;
+        }
+        else
+        {
+            write(STDOUT_FILENO, " ", 1); //공백 출력
+            len++;
+        }
+    }
+
+    write(STDOUT_FILENO, "\x1b[m", 3); //색상 반전 해제
+    write(STDOUT_FILENO, "\r\n", 2); //줄 바꿈
+}
+
+void editorDrawMessageBar() //메시지 바 그리기
+{
+    write(STDOUT_FILENO, "\x1b[K", 3); //메시지 바 지우기
+
+    int msglen = strlen(E.statusmsg); //현재 메시지 길이 계산
+    if (msglen > E.screencols) //메시지 길이가 화면 너비보다 크면 잘라내기
+        msglen = E.screencols;
+
+    if (msglen > 0 && time(NULL) - E.statusmsg_time < 5) //메시지가 있고 5초 이내면
+    {
+        write(STDOUT_FILENO, E.statusmsg, msglen); //메시지 출력
+    }
+}
+
+char* editorPrompt(char* prompt) //프롬프트 표시 및 입력 받기
+{
+    size_t bufsize = 128; //버퍼 크기
+    char* buf = (char*)malloc(bufsize); //버퍼 메모리 할당
+    size_t buflen = 0; //현재 버퍼 길이
+    buf[0] = '\0'; //버퍼 초기화
+
+    while(1)
+    {
+        editorSetStatusMessage(prompt, buf); //상태 메시지에 프롬프트와 현재 입력된 내용 표시
+        editorRefreshScreen(); //화면 업데이트
+
+        int c = editorReadKey(); //키 입력 읽기
+
+        if (c == '\r') //엔터 키 : 입력 완료
+        {
+            if (buflen != 0) //버퍼에 내용이 있으면
+            {
+                editorSetStatusMessage(""); //상태 메시지 지우기
+                return buf; //입력된 내용 반환
+            }
+        }
+        else if (c == 127 || c == CTRL_KEY('h') || c == CTRL_KEY('?')) //백스페이스 키 : 마지막 문자 삭제
+        {
+            if (buflen != 0) //버퍼에 내용이 있으면
+            {
+                buf[--buflen] = '\0'; //버퍼에서 마지막 문자 제거
+            }
+        }
+        else if (c == '\x1b') //Esc 키 : 입력 취소
+        {
+            editorSetStatusMessage(""); //상태 메시지 지우기
+            free(buf); //버퍼 메모리 해제
+            return NULL; //NULL 반환
+        }
+        else if (!iscntrl(c) && c < 128) //제어 문자가 아니고 ASCII 범위 내의 문자이면
+        {
+            if (buflen + 1 >= bufsize) //버퍼가 꽉 찼으면
+            {
+                bufsize *= 2; //버퍼 크기 두 배로 늘리기
+                buf = (char*)realloc(buf, bufsize); //버퍼 재할당
+            }
+            buf[buflen++] = c; //버퍼에 문자 추가
+            buf[buflen] = '\0'; //널 종료 문자 추가
+        }
+    }
 }
