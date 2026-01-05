@@ -2,7 +2,34 @@
 C언어로 직접 구현해 본 Linux 기반 Text Editor입니다.
 
 ## 실행 영상
-(추후 첨부)
+* 글자 입력
+
+![typing](typing.gif)
+---
+* 글자 삭제
+
+![erasing](erasing.gif)
+---
+* 줄바꾸기/줄 합치기
+
+![line manage](line.gif)
+---
+* 저장
+
+![save](save.gif)
+---
+* 스크롤
+
+![scroll](scroll.gif)
+---
+* 상태메시지 바
+
+![status/message](bar.gif)
+---
+* 탭 키
+
+![tab key](tab.gif)
+---
 
 ## 주요 기능
 * 파일 입출력 : 파일을 열고 수정 내용 저장 가능
@@ -16,7 +43,7 @@ C언어로 직접 구현해 본 Linux 기반 Text Editor입니다.
 
 ### 소스 코드 다운로드
 ```bash
-git clone (주소)
+git clone https://github.com/greenleo05/my-nano.git
 cd my-nano
 ```
 
@@ -27,7 +54,7 @@ make
 
 ### 실행
 ```bash
-./mynano (파일 경로)
+./mynano (열려는 .txt 파일 경로)
 ```
 
 ## Windows 사용자를 위한 실행 가이드

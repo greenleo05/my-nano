@@ -1,8 +1,86 @@
-applepie bananabread
-cupcake donut eclair
-froyo gingerbread Honeycomb
-Icecreamsandwich Jellybean
-Kitkat Lollipop Marshmallow Nougat
-Oreo Pie
+1. typing
+You can type on the keyboard to write to this file
+
+apple
+
+banana
 
 
+2. erasing
+You can erase characters by pressing the Backspace key
+
+apple
+
+banana
+
+
+3. line management
+You can press Enter and Backspace to combine two lines and divide one line
+
+apple
+
+banana
+
+
+4. save a file
+You can press Ctrl-S to save this modified file
+
+(You can Press Ctrl-S)
+
+
+5. Auto Scrolling
+You can move cursor with the direction key and when the cursor reaches the end of the screen, it scrolls automatically
+This follows the window size determined at execution
+
+
+6. Status Bar/Message Bar
+At the bottom of the screen is a color inverted status bar,
+which indicates the total number of line, the current number of lines, and whether they have been modified
+
+((modified) disappears when Ctrl-S is pressed))
+
+
+7. Tab key
+When the Tab key is pressed, the characters are arranged at 8-space intervals
+
+abc
+ abc
+  abc
+   abc 
+    abc
+     abc
+      abc
+       abc
+        abc
+         abc
+
+
+8. Quit
+You can exit the program by pressing Ctrl-Q.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+(Thanks for watching!)
