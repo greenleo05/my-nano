@@ -1,0 +1,40 @@
+# .gitignore for my-nano project
+# 빌드 산출물
+*.o
+*.obj
+*.a
+*.so
+*.dSYM/
+*.exe
+a.out
+core
+
+# 일반적인 바이너리/빌드 디렉터리
+/bin/
+/build/
+
+# 프로젝트별 실행파일
+# `mynano` 실행파일과 `main` 같은 컴파일 결과물
+mynano
+main
+
+# 캐시 / 임시 파일
+*.log
+*.tmp
+*.run
+*.out
+*.orig
+
+# 에디터 / IDE
+.vscode/
+.idea/
+*.swp
+*~
+*.swo
+
+# macOS
+.DS_Store
+
+# 기타
+tags
+ctags
